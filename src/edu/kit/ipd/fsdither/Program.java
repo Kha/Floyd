@@ -68,15 +68,20 @@ public final class Program extends JFrame {
 
 	private BufferedImage source;
 	private File target;
+	private BufferedImage result;
 
-	private final JButton floydButton;
+	private JButton floydButton;
 	private JSlider bitSlider;
 	private FilePanel sourcePanel;
 	private FilePanel targetPanel;
 
 	private Program() {
 		super("Floyd-Steinberg");
-
+		
+		createContent();
+	}
+	
+	private void createContent() {
 		setLayout(new BoxLayout(getContentPane(), BoxLayout.PAGE_AXIS));
 
 		JPanel imagesPanel = createImagesPanel();
@@ -107,7 +112,18 @@ public final class Program extends JFrame {
 
 		floydButton = new JButton("Starte Reduzierung");
 		floydButton.setEnabled(false);
-
+		floydButton.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				try {
+					ImageIO.write(result, "PNG", target);
+				} catch (IOException e1) {
+					JOptionPane.showMessageDialog(Program.this,
+							"Zieldatei konnte nicht geschrieben werden",
+							"Fehler", JOptionPane.ERROR_MESSAGE);
+				}
+			}
+		});
 
 		add(imagesPanel);
 		add(optionsPanel);
@@ -173,23 +189,17 @@ public final class Program extends JFrame {
 	}
 
 	private void updateViews() {
-		BufferedImage result = cloneImage(source);
+		result = cloneImage(source);
 		floydSteinbergDither(result, bitSlider.getValue() / 3);
 
-		sourcePanel.imageLabel.setIcon(new ImageIcon(cloneImage(source, 150, 150)));
-		targetPanel.imageLabel.setIcon(new ImageIcon(cloneImage(result, 150, 150)));
-	}
-
-	private static BufferedImage cloneImage(BufferedImage image, int width,
-			int height) {
-		BufferedImage result = new BufferedImage(width, height, image.getType());
-		result.setData(image.getData());
-		return result;
+		sourcePanel.imageLabel.setIcon(new ImageIcon(source.getSubimage(0, 0, 150, 150)));
+		targetPanel.imageLabel.setIcon(new ImageIcon(result.getSubimage(0, 0, 150, 150)));
 	}
 
 	private static BufferedImage cloneImage(BufferedImage image) {
-		return cloneImage(image, image.getWidth(), image.getHeight());
+		return new BufferedImage(image.getColorModel(), image.copyData(null), image.isAlphaPremultiplied(), null);
 	}
+
 
 	/**
 	 * Entry point of the program.
