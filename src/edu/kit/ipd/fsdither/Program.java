@@ -1,9 +1,6 @@
 package edu.kit.ipd.fsdither;
 
 import java.awt.image.BufferedImage;
-import java.io.IOException;
-
-import javax.imageio.ImageIO;
 
 /**
  * Main class of the program.
@@ -21,27 +18,7 @@ public final class Program {
 	 *            command line arguments - see Configuration.java
 	 */
 	public static void main(String[] args) {
-		Configuration config = new Configuration(args);
-		if (!config.isErrorFree()) {
-			return;
-		}
-
-		BufferedImage input;
-		try {
-			input = ImageIO.read(config.getSource());
-		} catch (IOException e) {
-			System.out.println("Input file couldn't be read: " + e.getMessage());
-			return;
-		}
-
-		floydSteinbergDither(input);
-
-		try {
-			ImageIO.write(input, "PNG", config.getTarget());
-		} catch (IOException e) {
-			System.out.println("Output file couldn't be written: " + e.getMessage());
-			return;
-		}
+		
 	}
 
 	// The 3x3 distribution matrix of the algorithm
