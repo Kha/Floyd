@@ -1,8 +1,8 @@
 package edu.kit.ipd.fsdither;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.GridLayout;
-import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
@@ -20,6 +20,8 @@ import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 import javax.swing.filechooser.FileNameExtensionFilter;
 
 /**
@@ -33,13 +35,12 @@ public final class Program extends JFrame {
 			{ 0, 0, 7. / 16 }, { 3. / 16, 5. / 16, 1. / 16 } };
 
 	private BufferedImage source;
-	private final BufferedImage reviewImage = new BufferedImage(150, 150,
-			BufferedImage.TYPE_INT_RGB);
-	private final BufferedImage previewImage = new BufferedImage(150, 150,
-			BufferedImage.TYPE_INT_RGB);
 	private File target;
 
 	private final JButton floydButton;
+	private JSlider bitSlider;
+	private JLabel reviewLabel;
+	private JLabel previewLabel;
 
 	private Program() {
 		super("Floyd-Steinberg");
@@ -51,9 +52,15 @@ public final class Program extends JFrame {
 		floydButton = new JButton("Bild auf 3 Bit reduzieren");
 		floydButton.setEnabled(false);
 
-		JSlider spaceSlider = new JSlider(0, 6, 0);
+		bitSlider = new JSlider(1, 8, 8);
+		bitSlider.addChangeListener(new ChangeListener() {
+			@Override
+			public void stateChanged(ChangeEvent e) {
+				updateViews();
+			}
+		});
 
-		bottomPanel.add(spaceSlider, BorderLayout.LINE_START);
+		bottomPanel.add(bitSlider, BorderLayout.LINE_START);
 		bottomPanel.add(floydButton);
 
 		add(centerPanel);
@@ -107,24 +114,36 @@ public final class Program extends JFrame {
 			}
 		});
 
-		ImageIcon reviewIcon = new ImageIcon(reviewImage);
-		ImageIcon previewIcon = new ImageIcon(previewImage);
+		reviewLabel = new JLabel();
+		reviewLabel.setPreferredSize(new Dimension(150, 150));
+
+		previewLabel = new JLabel();
+		previewLabel.setPreferredSize(new Dimension(150, 150));
 
 		centerPanel.add(sourceButton);
 		centerPanel.add(targetButton);
-		centerPanel.add(new JLabel(reviewIcon));
-		centerPanel.add(new JLabel(previewIcon));
+		centerPanel.add(reviewLabel);
+		centerPanel.add(previewLabel);
 		return centerPanel;
 	}
 
 	private void updateViews() {
-		BufferedImage result = new BufferedImage(source.getWidth(),
-				source.getHeight(), source.getType());
-		result.setData(source.getData());
-		floydSteinbergDither(result);
+		BufferedImage result = cloneImage(source);
+		floydSteinbergDither(result, bitSlider.getValue());
 
-		reviewImage.setData(source.getData(new Rectangle(0, 0, 150, 150)));
-		previewImage.setData(result.getData());
+		reviewLabel.setIcon(new ImageIcon(cloneImage(source, 150, 150)));
+		previewLabel.setIcon(new ImageIcon(cloneImage(result, 150, 150)));
+	}
+
+	private static BufferedImage cloneImage(BufferedImage image, int width,
+			int height) {
+		BufferedImage result = new BufferedImage(width, height, image.getType());
+		result.setData(image.getData());
+		return result;
+	}
+
+	private static BufferedImage cloneImage(BufferedImage image) {
+		return cloneImage(image, image.getWidth(), image.getHeight());
 	}
 
 	/**
@@ -149,15 +168,20 @@ public final class Program extends JFrame {
 	}
 
 	// See http://en.wikipedia.org/wiki/Floyd%E2%80%93Steinberg_dithering
-	private static void floydSteinbergDither(BufferedImage image) {
+	private static void floydSteinbergDither(BufferedImage image,
+			int bitsPerChan) {
+		int chanValues = 1 << bitsPerChan;
+		double colorsPerChanValue = 256.0 / chanValues;
+
 		for (int y = 0; y < image.getHeight(); y++) {
 			for (int x = 0; x < image.getWidth(); x++) {
 				int[] rgb = colorToRGB(image.getRGB(x, y));
 				int[] newPixel = new int[3];
 
-				// Reduce each channel to 1 bit
+				// Reduce each channel
 				for (int channel = 0; channel < 3; channel++) {
-					newPixel[channel] = (rgb[channel] + 128) / 256 * 255;
+					newPixel[channel] = (int) (Math.floor(rgb[channel]
+							/ colorsPerChanValue) * 255 / (chanValues - 1));
 				}
 				image.setRGB(x, y, rgbToColor(newPixel));
 
