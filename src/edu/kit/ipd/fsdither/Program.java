@@ -40,6 +40,10 @@ public final class Program extends JFrame {
 			{ 3. / 16, 5. / 16, 1. / 16 }
 	};
 
+	// Models a panel consisting of a file selector (non-editable path textbox
+	// and
+	// button to invoke a FileChooser) and a preview of the image loaded/to be
+	// saved.
 	private static final class FilePanel extends JPanel {
 		private static final long serialVersionUID = 3673273071068438357L;
 
@@ -77,10 +81,11 @@ public final class Program extends JFrame {
 
 	private Program() {
 		super("Floyd-Steinberg");
-		
+
 		createContent();
 	}
-	
+
+	// Creates source and target panels, bit depth slider and execution button.
 	private void createContent() {
 		setLayout(new BoxLayout(getContentPane(), BoxLayout.PAGE_AXIS));
 
@@ -134,6 +139,7 @@ public final class Program extends JFrame {
 		pack();
 	}
 
+	// Creates source and target panels.
 	private JPanel createImagesPanel() {
 		JPanel panel = new JPanel();
 		panel.setLayout(new BoxLayout(panel, BoxLayout.LINE_AXIS));
@@ -141,6 +147,8 @@ public final class Program extends JFrame {
 		sourcePanel = new FilePanel("Quelldatei:");
 
 		sourcePanel.chooseButton.addActionListener(new ActionListener() {
+			// Opens chosen file, fills path textbox and updates previews if
+			// ready.
 			@Override
 			public void actionPerformed(ActionEvent e) {
 				JFileChooser chooser = new JFileChooser();
@@ -188,6 +196,7 @@ public final class Program extends JFrame {
 		return panel;
 	}
 
+	// Updates both preview labels using source.
 	private void updateViews() {
 		result = cloneImage(source);
 		floydSteinbergDither(result, bitSlider.getValue() / 3);
@@ -196,6 +205,7 @@ public final class Program extends JFrame {
 		targetPanel.imageLabel.setIcon(new ImageIcon(result.getSubimage(0, 0, 150, 150)));
 	}
 
+	// Creates a copy of image.
 	private static BufferedImage cloneImage(BufferedImage image) {
 		return new BufferedImage(image.getColorModel(), image.copyData(null), image.isAlphaPremultiplied(), null);
 	}
@@ -215,9 +225,8 @@ public final class Program extends JFrame {
 	 * @throws ClassNotFoundException
 	 *             catch those
 	 */
-	public static void main(String[] args) throws ClassNotFoundException,
-			InstantiationException, IllegalAccessException,
-			UnsupportedLookAndFeelException {
+	public static void main(String[] args) throws ClassNotFoundException, InstantiationException,
+			IllegalAccessException, UnsupportedLookAndFeelException {
 		UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 		new Program().setVisible(true);
 	}
