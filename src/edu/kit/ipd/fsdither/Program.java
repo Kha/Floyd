@@ -62,7 +62,6 @@ public final class Program extends JFrame {
 		}
 	}
 
-
 	private BufferedImage source;
 	private File target;
 	private BufferedImage result;
@@ -83,7 +82,6 @@ public final class Program extends JFrame {
 		setLayout(new BoxLayout(getContentPane(), BoxLayout.PAGE_AXIS));
 
 		JPanel imagesPanel = createImagesPanel();
-
 
 		JPanel optionsPanel = new JPanel(new BorderLayout());
 		optionsPanel.setBorder(BorderFactory
@@ -106,7 +104,6 @@ public final class Program extends JFrame {
 		});
 
 		optionsPanel.add(bitSlider);
-
 
 		floydButton = new JButton("Starte Reduzierung");
 		floydButton.setEnabled(false);
@@ -203,7 +200,6 @@ public final class Program extends JFrame {
 		return new BufferedImage(image.getColorModel(), image.copyData(null), image.isAlphaPremultiplied(), null);
 	}
 
-
 	/**
 	 * Entry point of the program.
 	 * 
@@ -220,7 +216,31 @@ public final class Program extends JFrame {
 	 */
 	public static void main(String[] args) throws ClassNotFoundException, InstantiationException,
 			IllegalAccessException, UnsupportedLookAndFeelException {
-		UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-		new Program().setVisible(true);
+		if (args.length > 0) {
+			Configuration config = new Configuration(args);
+			if (!config.isErrorFree()) {
+				return;
+			}
+
+			BufferedImage input;
+			try {
+				input = ImageIO.read(config.getSource());
+			} catch (IOException e) {
+				System.out.println("Input file couldn't be read: " + e.getMessage());
+				return;
+			}
+
+			FloydSteinberg.floydSteinbergDither(input, config.getTargetColorDepth() / 3);
+
+			try {
+				ImageIO.write(input, "PNG", config.getTarget());
+			} catch (IOException e) {
+				System.out.println("Output file couldn't be written: " + e.getMessage());
+				return;
+			}
+		} else {
+			UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+			new Program().setVisible(true);
+		}
 	}
 }
