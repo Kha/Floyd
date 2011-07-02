@@ -41,8 +41,17 @@ public final class FloydSteinberg {
   public static void floydSteinbergDither(BufferedImage image,
       int bitsPerChan) {
     int chanValues = 1 << bitsPerChan;
-    double colorsPerChanValue = 256.0 / chanValues;
 
+	// Precalculate reduced value for each original channel value
+	int[] reduced = new int[256];
+	for (int i = 0; i < 256; i++) {
+		reduced[i] = (i / (256 / chanValues))
+				* (255 / (chanValues - 1));
+		if (reduced[i] > 255) {
+			reduced[i] = 255;
+		}
+	}
+	
     for (int y = 0; y < image.getHeight(); y++) {
       for (int x = 0; x < image.getWidth(); x++) {
         int[] rgb = colorToRGB(image.getRGB(x, y));
@@ -50,8 +59,7 @@ public final class FloydSteinberg {
 
         // Reduce each channel
         for (int channel = 0; channel < 3; channel++) {
-          newPixel[channel] = (int) (Math.floor(rgb[channel]
-              / colorsPerChanValue) * 255 / (chanValues - 1));
+          newPixel[channel] = reduced[rgb[channel]];
         }
         image.setRGB(x, y, rgbToColor(newPixel));
 
