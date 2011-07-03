@@ -19,7 +19,7 @@ public final class FloydSteinberg {
 	 */
 	public FloydSteinberg(BufferedImage image) {
 		this.image = image;
-		data = ((DataBufferByte) image.getData().getDataBuffer()).getData();
+		data = ((DataBufferByte) image.getRaster().getDataBuffer()).getData();
 	}
 
 	// Fits value into the interval [0..255]
@@ -38,28 +38,28 @@ public final class FloydSteinberg {
 		int chanValues = 1 << bitsPerChan;
 
 		// Precalculate reduced value for each original channel value
-		byte[] reduced = new byte[256];
+		int[] reduced = new int[256];
 		for (int i = 0; i < 256; i++) {
-			reduced[i] = (byte) ((i / (256 / chanValues))
+			reduced[i] = ((i / (256 / chanValues))
 					* (255 / (chanValues - 1)));
 			if (reduced[i] > 255) {
-				reduced[i] = (byte) 255;
+				reduced[i] = 255;
 			}
 		}
 
 		for (int y = 0; y < image.getHeight(); y++) {
 			for (int x = 0; x < image.getWidth(); x++) {
 				int p = 3 * (y * image.getWidth() + x);
-				byte oldR = data[p];
-				byte oldG = data[p + 1];
-				byte oldB = data[p + 2];
+				int oldR = (int) data[p] & 0xFF;
+				int oldG = (int) data[p + 1] & 0xFF;
+				int oldB = (int) data[p + 2] & 0xFF;
 
-				byte newR = reduced[oldR + 128];
-				byte newG = reduced[oldG + 128];
-				byte newB = reduced[oldB + 128];
-				data[p] = newR;
-				data[p + 1] = newG;
-				data[p + 2] = newB;
+				int newR = reduced[oldR];
+				int newG = reduced[oldG];
+				int newB = reduced[oldB];
+				data[p] = (byte) newR;
+				data[p + 1] = (byte) newG;
+				data[p + 2] = (byte) newB;
 
 				propagateError(x + 1, y, oldR - newR, oldG - newG, oldB - newB, 7);
 				propagateError(x - 1, y + 1, oldR - newR, oldG - newG, oldB - newB, 3);
@@ -75,8 +75,8 @@ public final class FloydSteinberg {
 		}
 
 		int p = 3 * (y * image.getWidth() + x);
-		data[p] = clampToByte(data[p] + errR * factor / 16);
-		data[p + 1] = clampToByte(data[p + 1] + errG * factor / 16);
-		data[p + 2] = clampToByte(data[p + 2] + errB * factor / 16);
+		data[p] = clampToByte(((int) data[p] & 0xFF) + errR * factor / 16);
+		data[p + 1] = clampToByte(((int) data[p + 1] & 0xFF) + errG * factor / 16);
+		data[p + 2] = clampToByte(((int) data[p + 2] & 0xFF) + errB * factor / 16);
 	}
 }
