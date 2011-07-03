@@ -1,90 +1,82 @@
 package edu.kit.ipd.fsdither;
 
 import java.awt.image.BufferedImage;
+import java.awt.image.DataBufferByte;
 
 /**
  * Implements the Floyd-Steinberg dithering algorithm.
  * 
  */
 public final class FloydSteinberg {
-  private FloydSteinberg() {
+	private final BufferedImage image;
+	private final byte[] data;
 
-  }
+	/**
+	 * Creates a new class instance for dithering the specified image.
+	 * 
+	 * @param image
+	 *            the image to dither
+	 */
+	public FloydSteinberg(BufferedImage image) {
+		this.image = image;
+		data = ((DataBufferByte) image.getData().getDataBuffer()).getData();
+	}
 
-  // The 3x3 distribution matrix of the algorithm
-  private static final double[][] DISTRIBUTION = {
-      { 0, 0, 0 },
-      { 0, 0, 7. / 16 },
-      { 3. / 16, 5. / 16, 1. / 16 }
-  };
+	// Fits value into the interval [0..255]
+	private static byte clampToByte(int value) {
+		return (byte) Math.max(0, Math.min(255, value));
+	}
 
-  // Fits value into the interval [0..255]
-  private static int clampToByte(int value) {
-    return Math.max(0, Math.min(255, value));
-  }
+	/**
+	 * Performs Floyd-Steinberg dithering according to
+	 * http://en.wikipedia.org/wiki/Floyd%E2%80%93Steinberg_dithering
+	 * 
+	 * @param bitsPerChan
+	 *            number of bits per channel to reduce to
+	 */
+	public void dither(int bitsPerChan) {
+		int chanValues = 1 << bitsPerChan;
 
-  // Extracts RGB channel values from color.
-  private static int[] colorToRGB(int color) {
-    return new int[] { (color >>> 16) & 0xFF, (color >>> 8) & 0xFF,
-        color & 0xFF };
-  }
+		// Precalculate reduced value for each original channel value
+		byte[] reduced = new byte[256];
+		for (int i = 0; i < 256; i++) {
+			reduced[i] = (byte) ((i / (256 / chanValues))
+					* (255 / (chanValues - 1)));
+			if (reduced[i] > 255) {
+				reduced[i] = (byte) 255;
+			}
+		}
 
-  /**
-   * Performs Floyd-Steinberg dithering according to
-   * http://en.wikipedia.org/wiki/Floyd%E2%80%93Steinberg_dithering
-   * 
-   * @param image
-   *          the image to dither
-   * @param bitsPerChan
-   *          number of bits per channel to reduce to
-   */
-  public static void floydSteinbergDither(BufferedImage image,
-      int bitsPerChan) {
-    int chanValues = 1 << bitsPerChan;
+		for (int y = 0; y < image.getHeight(); y++) {
+			for (int x = 0; x < image.getWidth(); x++) {
+				int p = 3 * (y * image.getWidth() + x);
+				byte oldR = data[p];
+				byte oldG = data[p + 1];
+				byte oldB = data[p + 2];
 
-	// Precalculate reduced value for each original channel value
-	int[] reduced = new int[256];
-	for (int i = 0; i < 256; i++) {
-		reduced[i] = (i / (256 / chanValues))
-				* (255 / (chanValues - 1));
-		if (reduced[i] > 255) {
-			reduced[i] = 255;
+				byte newR = reduced[oldR + 128];
+				byte newG = reduced[oldG + 128];
+				byte newB = reduced[oldB + 128];
+				data[p] = newR;
+				data[p + 1] = newG;
+				data[p + 2] = newB;
+
+				propagateError(x + 1, y, oldR - newR, oldG - newG, oldB - newB, 7);
+				propagateError(x - 1, y + 1, oldR - newR, oldG - newG, oldB - newB, 3);
+				propagateError(x, y + 1, oldR - newR, oldG - newG, oldB - newB, 5);
+				propagateError(x + 1, y + 1, oldR - newR, oldG - newG, oldB - newB, 1);
+			}
 		}
 	}
-	
-    for (int y = 0; y < image.getHeight(); y++) {
-      for (int x = 0; x < image.getWidth(); x++) {
-        int[] rgb = colorToRGB(image.getRGB(x, y));
-        int[] newPixel = new int[3];
 
-        // Reduce each channel
-        for (int channel = 0; channel < 3; channel++) {
-          newPixel[channel] = reduced[rgb[channel]];
-        }
-        image.setRGB(x, y, rgbToColor(newPixel));
+	private void propagateError(int x, int y, int errR, int errG, int errB, int factor) {
+		if (x >= image.getWidth() || y >= image.getHeight() || x < 0 || y < 0) {
+			return;
+		}
 
-        // propagate reduction error
-        for (int dy = -1; dy <= 1; dy++) {
-          for (int dx = -1; dx <= 1; dx++) {
-            int y2 = y + dy;
-            int x2 = x + dx;
-            if (y2 >= 0 && y2 < image.getHeight() && x2 >= 0
-                && x2 < image.getWidth()) {
-              int[] rgb2 = colorToRGB(image.getRGB(x2, y2));
-              for (int channel = 0; channel < 3; channel++) {
-                rgb2[channel] = clampToByte(rgb2[channel]
-                    + (int) ((rgb[channel] - newPixel[channel]) * DISTRIBUTION[dy + 1][dx + 1]));
-              }
-              image.setRGB(x2, y2, rgbToColor(rgb2));
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Combines RGB channel values into color value.
-  private static int rgbToColor(int[] rgb) {
-    return rgb[0] << 16 | rgb[1] << 8 | rgb[2];
-  }
+		int p = 3 * (y * image.getWidth() + x);
+		data[p] = clampToByte(data[p] + errR * factor / 16);
+		data[p + 1] = clampToByte(data[p + 1] + errG * factor / 16);
+		data[p + 2] = clampToByte(data[p + 2] + errB * factor / 16);
+	}
 }
