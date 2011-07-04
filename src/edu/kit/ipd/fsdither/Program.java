@@ -189,7 +189,7 @@ public final class Program extends JFrame {
 	// Updates both preview labels using source.
 	private void updateViews() {
 		result = cloneImage(source);
-		new FloydSteinberg(result).dither(bitSlider.getValue() / 3);
+		new FloydSteinberg(result).dither(bitSlider.getValue() / 3, 1);
 
 		sourcePanel.imageLabel.setIcon(new ImageIcon(source.getSubimage(0, 0, 150, 150)));
 		targetPanel.imageLabel.setIcon(new ImageIcon(result.getSubimage(0, 0, 150, 150)));
@@ -230,7 +230,7 @@ public final class Program extends JFrame {
 				return;
 			}
 
-			new FloydSteinberg(input).dither(config.getTargetColorDepth() / 3);
+			new FloydSteinberg(input).dither(config.getTargetColorDepth() / 3, config.getNumThreads());
 
 			try {
 				ImageIO.write(input, "PNG", config.getTarget());

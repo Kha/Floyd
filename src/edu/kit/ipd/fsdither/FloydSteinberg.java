@@ -2,6 +2,8 @@ package edu.kit.ipd.fsdither;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicIntegerArray;
 
 /**
  * Implements the Floyd-Steinberg dithering algorithm.
@@ -27,18 +29,24 @@ public final class FloydSteinberg {
 		return (byte) Math.max(0, Math.min(255, value));
 	}
 
+	AtomicInteger nextLine;
+	AtomicIntegerArray linePositions;
+	int[] reduced;
+
 	/**
 	 * Performs Floyd-Steinberg dithering according to
 	 * http://en.wikipedia.org/wiki/Floyd%E2%80%93Steinberg_dithering
 	 * 
 	 * @param bitsPerChan
 	 *            number of bits per channel to reduce to
+	 * @param numThreads
+	 *            number of threads to use
 	 */
-	public void dither(int bitsPerChan) {
+	public void dither(int bitsPerChan, int numThreads) {
 		int chanValues = 1 << bitsPerChan;
 
 		// Precalculate reduced value for each original channel value
-		int[] reduced = new int[256];
+		reduced = new int[256];
 		for (int i = 0; i < 256; i++) {
 			reduced[i] = ((i / (256 / chanValues))
 					* (255 / (chanValues - 1)));
@@ -47,8 +55,45 @@ public final class FloydSteinberg {
 			}
 		}
 
-		for (int y = 0; y < image.getHeight(); y++) {
+		nextLine = new AtomicInteger(0);
+		linePositions = new AtomicIntegerArray(image.getHeight());
+
+		// spawn (numThreads-1) additional threads
+		Thread[] threads = new Thread[numThreads - 1];
+		for (int i = 0; i < numThreads - 1; i++) {
+			threads[i] = new Thread(new Runnable() {
+
+				@Override
+				public void run() {
+					doWork();
+				}
+			});
+			threads[i].start();
+		}
+
+		doWork();
+
+		for (Thread thread : threads) {
+			try {
+				thread.join();
+			} catch (InterruptedException e) {
+				throw new Error(e);
+			}
+		}
+	}
+
+	private int syncFreq = 30;
+	
+	private void doWork() {
+		int y;
+		while ((y = nextLine.getAndIncrement()) < image.getHeight()) {
 			for (int x = 0; x < image.getWidth(); x++) {
+				if (y > 0 && x % syncFreq == 0) {
+					// Spin-wait for thread above me
+					while (linePositions.get(y - 1) <= x / syncFreq) {
+					}
+				}
+				
 				int p = 3 * (y * image.getWidth() + x);
 				int oldR = (int) data[p] & 0xFF;
 				int oldG = (int) data[p + 1] & 0xFF;
@@ -65,7 +110,12 @@ public final class FloydSteinberg {
 				propagateError(x - 1, y + 1, oldR - newR, oldG - newG, oldB - newB, 3);
 				propagateError(x, y + 1, oldR - newR, oldG - newG, oldB - newB, 5);
 				propagateError(x + 1, y + 1, oldR - newR, oldG - newG, oldB - newB, 1);
+				
+				if (x > 0 && x % syncFreq == 0) {
+					linePositions.incrementAndGet(y);
+				}
 			}
+			linePositions.set(y, Integer.MAX_VALUE);
 		}
 	}
 
