@@ -84,8 +84,7 @@ public final class Program extends JFrame {
 		JPanel imagesPanel = createImagesPanel();
 
 		JPanel optionsPanel = new JPanel(new BorderLayout());
-		optionsPanel.setBorder(BorderFactory
-				.createTitledBorder("Farbtiefe wählen:"));
+		optionsPanel.setBorder(BorderFactory.createTitledBorder("Farbtiefe wählen:"));
 
 		bitSlider = new JSlider(3, 24, 3);
 		bitSlider.setMajorTickSpacing(3);
@@ -113,9 +112,8 @@ public final class Program extends JFrame {
 				try {
 					ImageIO.write(result, "PNG", target);
 				} catch (IOException e1) {
-					JOptionPane.showMessageDialog(Program.this,
-							"Zieldatei konnte nicht geschrieben werden",
-							"Fehler", JOptionPane.ERROR_MESSAGE);
+					JOptionPane.showMessageDialog(Program.this, "Zieldatei konnte nicht geschrieben werden", "Fehler",
+							JOptionPane.ERROR_MESSAGE);
 				}
 			}
 		});
@@ -148,9 +146,8 @@ public final class Program extends JFrame {
 					try {
 						source = ImageIO.read(file);
 					} catch (IOException e1) {
-						JOptionPane.showMessageDialog(Program.this,
-								"Quelldatei konnte nicht gelesen werden",
-								"Fehler", JOptionPane.ERROR_MESSAGE);
+						JOptionPane.showMessageDialog(Program.this, "Quelldatei konnte nicht gelesen werden", "Fehler",
+								JOptionPane.ERROR_MESSAGE);
 						return;
 					}
 
@@ -201,7 +198,9 @@ public final class Program extends JFrame {
 	}
 
 	/**
-	 * Entry point of the program.
+	 * Entry point of the program. If commandline args are passed in, they are
+	 * parse according to Configuration.java. Else an interactive interface will
+	 * open.
 	 * 
 	 * @param args
 	 *            command line arguments - see Configuration.java
@@ -230,7 +229,10 @@ public final class Program extends JFrame {
 				return;
 			}
 
+			long startTime = System.currentTimeMillis();
 			new FloydSteinberg(input).dither(config.getTargetColorDepth() / 3, config.getNumThreads());
+			long totalTime = System.currentTimeMillis() - startTime;
+			System.out.println("Time: " + totalTime + " ms");
 
 			try {
 				ImageIO.write(input, "PNG", config.getTarget());

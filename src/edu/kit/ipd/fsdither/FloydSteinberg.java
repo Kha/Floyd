@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicIntegerArray;
  */
 public final class FloydSteinberg {
 	private final BufferedImage image;
+	// raw data of the 24-bit image for superior access time
 	private final byte[] data;
 
 	/**
@@ -29,8 +30,21 @@ public final class FloydSteinberg {
 		return (byte) Math.max(0, Math.min(255, value));
 	}
 
+	// Because of Java's maniac omission of an unsigned byte type,
+	// we need an extra mask to get the full range of 0.255 into an int
+	private static int unsignedByteToInt(byte b) {
+		return (int) b & 0xFF;
+	}
+
+	// number of columns between synchronization points of two adjacent threads
+	private static final int SYNC_FREQ = 30;
+
+	// index of the next line to be processesed
 	AtomicInteger nextLine;
+	// column positions of the individual threads. linePositions[y]=x means the
+	// first SYNQ_FREQ * x pixels of line y have been processed.
 	AtomicIntegerArray linePositions;
+	// precalculated reduced values for each original channel value
 	int[] reduced;
 
 	/**
@@ -48,8 +62,7 @@ public final class FloydSteinberg {
 		// Precalculate reduced value for each original channel value
 		reduced = new int[256];
 		for (int i = 0; i < 256; i++) {
-			reduced[i] = ((i / (256 / chanValues))
-					* (255 / (chanValues - 1)));
+			reduced[i] = ((i / (256 / chanValues)) * (255 / (chanValues - 1)));
 			if (reduced[i] > 255) {
 				reduced[i] = 255;
 			}
@@ -58,11 +71,10 @@ public final class FloydSteinberg {
 		nextLine = new AtomicInteger(0);
 		linePositions = new AtomicIntegerArray(image.getHeight());
 
-		// spawn (numThreads-1) additional threads
+		// Spawn (numThreads-1) additional threads
 		Thread[] threads = new Thread[numThreads - 1];
 		for (int i = 0; i < numThreads - 1; i++) {
 			threads[i] = new Thread(new Runnable() {
-
 				@Override
 				public void run() {
 					doWork();
@@ -71,33 +83,38 @@ public final class FloydSteinberg {
 			threads[i].start();
 		}
 
+		// Let the current thread work on the data, too
 		doWork();
 
+		// Wait for completion
 		for (Thread thread : threads) {
 			try {
 				thread.join();
 			} catch (InterruptedException e) {
-				throw new Error(e);
+				throw new Error(e); // this shouldn't happen
 			}
 		}
 	}
 
-	private int syncFreq = 30;
-	
+	// Called numThreads times
 	private void doWork() {
 		int y;
+		// Get next line to be dithered in a thread-safe but efficient manner
 		while ((y = nextLine.getAndIncrement()) < image.getHeight()) {
 			for (int x = 0; x < image.getWidth(); x++) {
-				if (y > 0 && x % syncFreq == 0) {
-					// Spin-wait for thread above me
-					while (linePositions.get(y - 1) <= x / syncFreq) {
+				// Before entering a new block of SYNC_FREQ pixels, spin-wait
+				// for thread above me
+				if (y > 0 && x % SYNC_FREQ == 0) {
+					while (linePositions.get(y - 1) <= x / SYNC_FREQ) {
+						doNothingParticular();
 					}
+					// thread at line y-1 has left the block, lets get to work
 				}
-				
+
 				int p = 3 * (y * image.getWidth() + x);
-				int oldR = (int) data[p] & 0xFF;
-				int oldG = (int) data[p + 1] & 0xFF;
-				int oldB = (int) data[p + 2] & 0xFF;
+				int oldR = unsignedByteToInt(data[p]);
+				int oldG = unsignedByteToInt(data[p + 1]);
+				int oldB = unsignedByteToInt(data[p + 2]);
 
 				int newR = reduced[oldR];
 				int newG = reduced[oldG];
@@ -110,11 +127,13 @@ public final class FloydSteinberg {
 				propagateError(x - 1, y + 1, oldR - newR, oldG - newG, oldB - newB, 3);
 				propagateError(x, y + 1, oldR - newR, oldG - newG, oldB - newB, 5);
 				propagateError(x + 1, y + 1, oldR - newR, oldG - newG, oldB - newB, 1);
-				
-				if (x > 0 && x % syncFreq == 0) {
+
+				if (x > 0 && x % SYNC_FREQ == 0) {
+					// advanced to next block
 					linePositions.incrementAndGet(y);
 				}
 			}
+			// finished all blocks of line y
 			linePositions.set(y, Integer.MAX_VALUE);
 		}
 	}
@@ -125,8 +144,12 @@ public final class FloydSteinberg {
 		}
 
 		int p = 3 * (y * image.getWidth() + x);
-		data[p] = clampToByte(((int) data[p] & 0xFF) + errR * factor / 16);
-		data[p + 1] = clampToByte(((int) data[p + 1] & 0xFF) + errG * factor / 16);
-		data[p + 2] = clampToByte(((int) data[p + 2] & 0xFF) + errB * factor / 16);
+		data[p] = clampToByte(unsignedByteToInt(data[p]) + errR * factor / 16);
+		data[p + 1] = clampToByte(unsignedByteToInt(data[p + 1]) + errG * factor / 16);
+		data[p + 2] = clampToByte(unsignedByteToInt(data[p + 2]) + errB * factor / 16);
+	}
+
+	// Dummy method to avoid CheckStyle error on empty spin-wait loop
+	private void doNothingParticular() {
 	}
 }
