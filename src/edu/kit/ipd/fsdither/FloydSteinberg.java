@@ -3,7 +3,6 @@ package edu.kit.ipd.fsdither;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicIntegerArray;
 
 /**
  * Implements the Floyd-Steinberg dithering algorithm.
@@ -37,13 +36,16 @@ public final class FloydSteinberg {
 	}
 
 	// number of columns between synchronization points of two adjacent threads
-	private static final int SYNC_FREQ = 30;
+	private static final int SYNC_FREQ = 200;
 
 	// index of the next line to be processesed
 	AtomicInteger nextLine;
 	// column positions of the individual threads. linePositions[y]=x means the
 	// first SYNQ_FREQ * x pixels of line y have been processed.
-	AtomicIntegerArray linePositions;
+	int[] linePositions;
+	// objects to be notified by when the thread of the corresponding line
+	// has finished processing a block
+	Object[] lineLocks;
 	// precalculated reduced values for each original channel value
 	int[] reduced;
 
@@ -69,7 +71,11 @@ public final class FloydSteinberg {
 		}
 
 		nextLine = new AtomicInteger(0);
-		linePositions = new AtomicIntegerArray(image.getHeight());
+		linePositions = new int[image.getHeight()];
+		lineLocks = new Object[image.getWidth()];
+		for (int i = 0; i < image.getWidth(); i++) {
+			lineLocks[i] = new Object();
+		}
 
 		// Spawn (numThreads-1) additional threads
 		Thread[] threads = new Thread[numThreads - 1];
@@ -102,14 +108,20 @@ public final class FloydSteinberg {
 		// Get next line to be dithered in a thread-safe but efficient manner
 		while ((y = nextLine.getAndIncrement()) < image.getHeight()) {
 			for (int x = 0; x < image.getWidth(); x++) {
-				// Before entering a new block of SYNC_FREQ pixels, spin-wait
+				// Before entering a new block of SYNC_FREQ pixels, wait
 				// for thread above me
 				if (y > 0 && x % SYNC_FREQ == 0) {
-					while (linePositions.get(y - 1) <= x / SYNC_FREQ) {
-						doNothingParticular();
+					try {
+						synchronized (lineLocks[y - 1]) {
+							while (linePositions[y - 1] <= x / SYNC_FREQ) {
+								lineLocks[y - 1].wait();
+							}
+						}
+					} catch (InterruptedException e) {
+						throw new Error(e);
 					}
-					// thread at line y-1 has left the block, lets get to work
 				}
+				// thread at line y-1 has left the block, lets get to work
 
 				int p = 3 * (y * image.getWidth() + x);
 				int oldR = unsignedByteToInt(data[p]);
@@ -128,13 +140,21 @@ public final class FloydSteinberg {
 				propagateError(x, y + 1, oldR - newR, oldG - newG, oldB - newB, 5);
 				propagateError(x + 1, y + 1, oldR - newR, oldG - newG, oldB - newB, 1);
 
-				if (x > 0 && x % SYNC_FREQ == 0) {
-					// advanced to next block
-					linePositions.incrementAndGet(y);
+				if (x > 1 && x % SYNC_FREQ == 1) {
+					// first pixel of new block has been processed, meaning the
+					// data of the preceding block on the next line will not be touched
+					// again and we can notify the corresponding thread
+					synchronized (lineLocks[y]) {
+						linePositions[y]++;
+						lineLocks[y].notify();
+					}
 				}
 			}
 			// finished all blocks of line y
-			linePositions.set(y, Integer.MAX_VALUE);
+			synchronized (lineLocks[y]) {
+				linePositions[y] = Integer.MAX_VALUE;
+				lineLocks[y].notify();
+			}
 		}
 	}
 
@@ -147,9 +167,5 @@ public final class FloydSteinberg {
 		data[p] = clampToByte(unsignedByteToInt(data[p]) + errR * factor / 16);
 		data[p + 1] = clampToByte(unsignedByteToInt(data[p + 1]) + errG * factor / 16);
 		data[p + 2] = clampToByte(unsignedByteToInt(data[p + 2]) + errB * factor / 16);
-	}
-
-	// Dummy method to avoid CheckStyle error on empty spin-wait loop
-	private void doNothingParticular() {
 	}
 }
